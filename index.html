@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fortnite V7 - Ultimate Edition</title>
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Burbank+Big+Condensed+Black&family=Open+Sans:wght@700&display=swap');
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Open Sans', sans-serif; user-select: none; color: white; }
+
+        /* --- MENUS --- */
+        #menu-layer { position: absolute; inset: 0; background: radial-gradient(circle, #2c3e50, #000); display: flex; flex-direction: column; align-items: center; z-index: 2000; }
+        .nav { display: flex; gap: 20px; margin-top: 20px; }
+        .tab { font-size: 24px; font-weight: bold; cursor: pointer; opacity: 0.6; text-transform: uppercase; border-bottom: 3px solid transparent; }
+        .tab.active { opacity: 1; border-color: #f1c40f; color: #f1c40f; }
+
+        .screen { display: none; flex-direction: column; align-items: center; width: 100%; margin-top: 50px; }
+        .screen.active { display: flex; }
+
+        h1 { font-family: 'Arial Black', sans-serif; font-size: 80px; color: #f1c40f; text-shadow: 5px 5px 0 #000; font-style: italic; margin: 0; }
+        
+        .btn { background: #f1c40f; color: black; border: none; padding: 20px 60px; font-size: 30px; font-weight: 900; transform: skewX(-10deg); cursor: pointer; margin: 20px; box-shadow: 5px 5px 0 #c27c0e; }
+        .btn:hover { background: white; }
+        .btn-blue { background: #3498db; box-shadow: 5px 5px 0 #2980b9; color: white; }
+
+        /* Locker & BP */
+        .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; }
+        .item { width: 80px; height: 80px; background: rgba(255,255,255,0.1); border: 2px solid #555; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+        .item.selected { border-color: #f1c40f; background: rgba(241, 196, 15, 0.2); }
+        .item.locked { opacity: 0.4; cursor: not-allowed; }
+
+        /* --- HUD --- */
+        #ui-layer { display: none; position: absolute; inset: 0; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: white; border-radius: 50%; transform: translate(-50%,-50%); border: 1px solid black; }
+        
+        #storm-bar { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: #8e44ad; padding: 5px 20px; border-radius: 10px; border: 2px solid white; font-weight: bold; }
+        #kill-feed { position: absolute; top: 50px; left: 20px; font-size: 14px; }
+        .feed-msg { background: rgba(0,0,0,0.6); padding: 5px; margin-bottom: 2px; border-left: 3px solid red; }
+
+        #hud-bottom { position: absolute; bottom: 30px; left: 30px; }
+        .hp-container { width: 300px; height: 30px; background: #333; transform: skewX(-15deg); border: 2px solid white; }
+        .hp-fill { width: 100%; height: 100%; background: #2ecc71; transition: width 0.2s; }
+
+        #minimap-container { position: absolute; bottom: 30px; right: 30px; width: 150px; height: 150px; border: 3px solid white; border-radius: 5px; background: #000; overflow: hidden; }
+        
+        #xp-pop { position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); font-size: 50px; color: #f1c40f; font-weight: 900; opacity: 0; text-shadow: 2px 2px 0 black; transition: 0.5s; }
+        
+        #bus-msg { position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; font-weight: bold; text-shadow: 2px 2px 0 black; }
+        
+        /* INPUT P2P */
+        .p2p-box { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px; margin-top: 20px; text-align: center; }
+        input { padding: 10px; width: 200px; text-align: center; }
+    </style>
+    <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+</head>
+<body>
+
+<div id="menu-layer">
+    <div class="nav">
+        <div class="tab active" onclick="setTab('play')">JOUER</div>
+        <div class="tab" onclick="setTab('locker')">CASIER</div>
+        <div class="tab" onclick="setTab('pass')">PASSE DE COMBAT</div>
+    </div>
+
+    <div id="screen-play" class="screen active">
+        <h1>FORTNITE V7</h1>
+        <div style="font-size: 20px; color: #ccc; margin-bottom: 20px;">Niveau: <span id="lvl-txt">1</span> | XP: <span id="xp-txt">0</span></div>
+        
+        <div style="display: flex; gap: 50px;">
+            <div style="text-align: center;">
+                <h3>SOLO (BATTLE ROYALE)</h3>
+                <p>30 Bots • XP • Progression</p>
+                <button class="btn" onclick="startSolo()">LANCER SOLO</button>
+            </div>
+            <div style="text-align: center;">
+                <h3>MULTIJOUEUR (1v1)</h3>
+                <p>Inviter un ami (Peer2Peer)</p>
+                <div class="p2p-box">
+                    <button class="btn btn-blue" onclick="hostGame()">CRÉER (HOST)</button>
+                    <div id="host-id" style="user-select: text; color: #f1c40f; margin: 10px 0;">...</div>
+                    <hr>
+                    <input id="friend-id" placeholder="ID de l'ami">
+                    <button class="btn btn-blue" style="font-size: 16px; padding: 10px 20px;" onclick="joinGame()">REJOINDRE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-locker" class="screen">
+        <h2>COULEUR DU PERSONNAGE</h2>
+        <div class="grid" id="locker-grid"></div>
+    </div>
+
+    <div id="screen-pass" class="screen">
+        <h2>SAISON 1</h2>
+        <div style="width: 80%; height: 30px; background: #333; border: 2px solid #555; margin: 20px;">
+            <div id="bp-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #f1c40f, #e67e22);"></div>
+        </div>
+        <p>Gagnez de l'XP en tuant des bots pour débloquer des couleurs !</p>
+    </div>
+</div>
+
+<div id="ui-layer">
+    <div id="crosshair"></div>
+    <div id="bus-msg">ESPACE POUR SAUTER</div>
+    <div id="storm-bar">ZONE: <span id="storm-timer">ATTENTE</span></div>
+    <div id="kill-feed"></div>
+    <div id="xp-pop">+100 XP</div>
+    
+    <div id="hud-bottom">
+        <div class="hp-container"><div class="hp-fill" id="hp-val"></div></div>
+        <div style="font-weight: bold; margin-top: 5px;">PV: <span id="hp-num">100</span> | MATÉRIAUX: <span id="mat-num">50</span></div>
+        <div style="font-size: 12px; opacity: 0.8;">C: MUR | V: ESCALIER | CLIC: TIRER</div>
+    </div>
+
+    <div id="minimap-container"><canvas id="minimap" width="150" height="150"></canvas></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+// --- DATA & SAVE ---
+const GameData = { lvl: 1, xp: 0, skin: '#3498db' };
+const SKINS = [
+    {lvl:1, c:'#3498db'}, {lvl:2, c:'#2ecc71'}, {lvl:5, c:'#e74c3c'}, 
+    {lvl:10, c:'#9b59b6'}, {lvl:20, c:'#f1c40f'}, {lvl:50, c:'#000000'}
+];
+
+function loadSave() {
+    const s = localStorage.getItem('fv7_save');
+    if(s) Object.assign(GameData, JSON.parse(s));
+    updateMenu();
+}
+function save() {
+    localStorage.setItem('fv7_save', JSON.stringify(GameData));
+    updateMenu();
+}
+function addXP(amount) {
+    GameData.xp += amount;
+    if(GameData.xp >= 100) { GameData.lvl++; GameData.xp=0; alert("NIVEAU SUPÉRIEUR !"); }
+    save();
+    const pop = document.getElementById('xp-pop');
+    pop.style.opacity = 1; pop.style.top = "50%";
+    setTimeout(()=>{ pop.style.opacity=0; pop.style.top="60%"; }, 1000);
+}
+
+// --- MENU LOGIC ---
+window.setTab = (name) => {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('screen-'+name).classList.add('active');
+    
+    if(name === 'locker') renderLocker();
+};
+
+function updateMenu() {
+    document.getElementById('lvl-txt').innerText = GameData.lvl;
+    document.getElementById('xp-txt').innerText = GameData.xp;
+    document.getElementById('bp-bar').style.width = GameData.xp + "%";
+}
+
+function renderLocker() {
+    const g = document.getElementById('locker-grid');
+    g.innerHTML = '';
+    SKINS.forEach(s => {
+        const d = document.createElement('div');
+        d.className = 'item ' + (GameData.lvl >= s.lvl ? '' : 'locked');
+        if(GameData.skin === s.c) d.classList.add('selected');
+        d.style.backgroundColor = s.c;
+        d.innerHTML = `<span style="position:absolute; bottom:2px; right:2px; font-size:10px; color:white; font-weight:bold;">Niv ${s.lvl}</span>`;
+        if(GameData.lvl >= s.lvl) d.onclick = () => { GameData.skin = s.c; save(); renderLocker(); };
+        g.appendChild(d);
+    });
+}
+
+// --- GAME ENGINE ---
+let scene, camera, renderer, controls;
+let clock = new THREE.Clock();
+let entities = [], bullets = [], collidables = [], builds = [];
+let mode = 'SOLO'; // SOLO or MULTI
+let isHost = false, peer, conn;
+let player = { hp: 100, mats: 50, mesh: null, gun: null };
+let gameState = 'MENU'; // MENU, BUS, PLAY
+let busObj, stormMesh;
+let storm = { r: 1000, target: 1000, timer: 0, state: 'WAIT' };
+
+// Inputs
+let move = { f:0, b:0, l:0, r:0 };
+let velocity = new THREE.Vector3();
+let canJump = false;
+
+// --- INIT ---
+window.startSolo = () => { mode = 'SOLO'; isHost = true; launch(); };
+window.hostGame = () => {
+    peer = new Peer();
+    peer.on('open', id => document.getElementById('host-id').innerText = id);
+    peer.on('connection', c => { conn = c; mode = 'MULTI'; isHost = true; setupNet(); launch(); });
+};
+window.joinGame = () => {
+    const id = document.getElementById('friend-id').value;
+    peer = new Peer();
+    peer.on('open', () => { conn = peer.connect(id); mode = 'MULTI'; isHost = false; setupNet(); });
+};
+
+function setupNet() {
+    conn.on('data', d => {
+        if(d.t === 'START') launch();
+        if(d.t === 'POS') updateEnt(d.id, d.x, d.y, d.z, d.ry, d.skin);
+        if(d.t === 'BUILD') createBuild(d.x, d.y, d.z, d.type, false);
+        if(d.t === 'HIT') takeDamage(d.dmg);
+    });
+}
+function send(d) { if(conn && conn.open) conn.send(d); }
+
+function launch() {
+    if(isHost && mode==='MULTI') send({t:'START'});
+    document.getElementById('menu-layer').style.display = 'none';
+    document.getElementById('ui-layer').style.display = 'block';
+    
+    init3D();
+    
+    if(mode === 'SOLO') spawnBots(30);
+    gameState = 'BUS';
+}
+
+function init3D() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+    scene.fog = new THREE.Fog(0x87CEEB, 100, 1500);
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
+    
+    // Weapon Model (Attached to Camera)
+    const gunGeo = new THREE.BoxGeometry(0.5, 0.5, 2);
+    const gunMat = new THREE.MeshStandardMaterial({color:0x333});
+    player.gun = new THREE.Mesh(gunGeo, gunMat);
+    player.gun.position.set(0.5, -0.5, -1);
+    camera.add(player.gun);
+    scene.add(camera);
+
+    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Lights
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2));
+    const d = new THREE.DirectionalLight(0xffffff, 1.5);
+    d.position.set(200,500,200); scene.add(d);
+
+    // Floor
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(2000,2000), new THREE.MeshStandardMaterial({color:0x4CAF50}));
+    floor.rotation.x = -Math.PI/2;
+    floor.userData = { type: 'floor' };
+    scene.add(floor);
+    collidables.push(floor);
+
+    // World Gen
+    const treeGeo = new THREE.CylinderGeometry(2,4,20,8);
+    const treeMat = new THREE.MeshStandardMaterial({color:0x5D4037});
+    for(let i=0; i<200; i++) {
+        const m = new THREE.Mesh(treeGeo, treeMat);
+        m.position.set((Math.random()-.5)*1800, 10, (Math.random()-.5)*1800);
+        scene.add(m);
+        collidables.push(m);
+    }
+
+    // Bus
+    busObj = new THREE.Mesh(new THREE.BoxGeometry(40,20,80), new THREE.MeshBasicMaterial({color:0x2980b9}));
+    busObj.position.set(-1000, 300, 0);
+    scene.add(busObj);
+
+    // Storm
+    stormMesh = new THREE.Mesh(new THREE.CylinderGeometry(1000,1000,500,32,1,true), new THREE.MeshBasicMaterial({color:0x8e44ad, transparent:true, opacity:0.3, side:THREE.DoubleSide}));
+    scene.add(stormMesh);
+
+    controls = new PointerLockControls(camera, document.body);
+    document.addEventListener('click', () => controls.lock());
+    document.addEventListener('mousedown', onFire);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('keyup', onKey);
+    
+    camera.position.copy(busObj.position);
+    
+    animate();
+}
+
+function spawnBots(n) {
+    for(let i=0; i<n; i++) {
+        const bot = {
+            id: 'bot'+i,
+            pos: new THREE.Vector3((Math.random()-.5)*500, 5, (Math.random()-.5)*500),
+            hp: 100,
+            skin: SKINS[Math.floor(Math.random()*SKINS.length)].c,
+            mesh: null,
+            target: null,
+            cd: 0
+        };
+        createEntityMesh(bot);
+        entities.push(bot);
+    }
+}
+
+function createEntityMesh(e) {
+    e.mesh = new THREE.Mesh(new THREE.CapsuleGeometry(3,10,4,8), new THREE.MeshStandardMaterial({color:e.skin}));
+    e.mesh.position.copy(e.pos);
+    scene.add(e.mesh);
+}
+
+function updateEnt(id, x, y, z, ry, skin) {
+    let e = entities.find(x => x.id === id);
+    if(!e) {
+        e = { id:id, pos:new THREE.Vector3(), skin:skin };
+        createEntityMesh(e);
+        entities.push(e);
+    }
+    e.mesh.position.set(x,y,z);
+    e.mesh.rotation.y = ry;
+}
+
+// --- GAMEPLAY ---
+function onKey(e) {
+    const s = e.type === 'keydown';
+    if(e.code==='KeyW') move.f=s; if(e.code==='KeyS') move.b=s;
+    if(e.code==='KeyA') move.l=s; if(e.code==='KeyD') move.r=s;
+    if(e.code==='Space' && s) {
+        if(gameState==='BUS') drop();
+        else if(canJump) { velocity.y=130; canJump=false; }
+    }
+    if(s && (e.code==='KeyC' || e.code==='KeyV')) build(e.code==='KeyC'?'wall':'stair');
+}
+
+function drop() {
+    gameState = 'PLAY';
+    document.getElementById('bus-msg').style.display='none';
+    camera.position.copy(busObj.position);
+    velocity.y=0;
+}
+
+function build(type) {
+    if(player.mats < 10) return;
+    
+    // 1. Grid Snap
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    const pos = camera.position.clone().add(dir.multiplyScalar(20));
+    const gx = Math.round(pos.x/20)*20;
+    const gz = Math.round(pos.z/20)*20;
+    
+    // 2. Raycast Down to find Ground Y (Fix Floating)
+    const ray = new THREE.Raycaster(new THREE.Vector3(gx, 500, gz), new THREE.Vector3(0,-1,0));
+    const hits = ray.intersectObjects(collidables);
+    if(hits.length === 0) return; // Pas de sol trouvé
+    
+    const gy = hits[0].point.y; // Hauteur exacte du sol ou objet en dessous
+
+    // 3. Prevent Duplicates
+    if(builds.find(b => b.x===gx && b.z===gz && Math.abs(b.y - gy) < 5)) return;
+
+    player.mats -= 10;
+    document.getElementById('mat-num').innerText = player.mats;
+    createBuild(gx, gy, gz, type, true);
+}
+
+function createBuild(x, y, z, type, mine) {
+    const geo = type==='wall' ? new THREE.BoxGeometry(20,20,1) : new THREE.BoxGeometry(20,1,25);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color:0xd35400}));
+    
+    mesh.position.set(x, y + 10, z); // +10 car hauteur mur est 20 (centre a 10)
+    
+    // Rotation mur (simple)
+    if(type==='wall') {
+        // En multi c'est dur a sync la rotation parfaite sans envoyer l'info, on met une par défaut
+        // Ou on prend la direction joueur si c'est moi
+        if(mine) {
+             const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+             if(Math.abs(dir.x) > Math.abs(dir.z)) mesh.rotation.y = Math.PI/2;
+        }
+    } else {
+        mesh.rotation.x = -Math.PI/4; // Escalier
+    }
+
+    scene.add(mesh);
+    collidables.push(mesh);
+    builds.push({x,y,z});
+    
+    if(mine && mode==='MULTI') send({t:'BUILD', x,y,z, type});
+}
+
+function onFire() {
+    if(!controls.isLocked || player.mats < 0) return;
+    
+    // Recul anim
+    player.gun.position.z += 0.5;
+    setTimeout(() => player.gun.position.z -= 0.5, 50);
+
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0,0), camera);
+    
+    // Bots Hit
+    entities.forEach((e, i) => {
+        const hits = ray.intersectObject(e.mesh);
+        if(hits.length > 0 && hits[0].distance < 200) {
+            e.hp -= 34;
+            // Visual Flash
+            e.mesh.material.color.setHex(0xffffff);
+            setTimeout(()=> e.mesh.material.color.set(e.skin), 100);
+            
+            if(e.hp <= 0) {
+                scene.remove(e.mesh);
+                entities.splice(i, 1);
+                addXP(50);
+                feed("Vous", "Bot");
+            }
+        }
+    });
+
+    // Multi Hit
+    if(mode==='MULTI') send({t:'HIT', dmg:30});
+    
+    // Bullet visual
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xffff00}));
+    b.position.copy(camera.position);
+    b.position.y -= 0.5;
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    b.userData = { vel: dir.multiplyScalar(5) };
+    scene.add(b);
+    bullets.push(b);
+}
+
+function takeDamage(n) {
+    player.hp -= n;
+    document.getElementById('hp-val').style.width = player.hp + "%";
+    document.getElementById('hp-num').innerText = player.hp;
+    document.body.style.boxShadow = "inset 0 0 50px red";
+    setTimeout(()=> document.body.style.boxShadow="none", 200);
+    if(player.hp <= 0) { alert("KO"); location.reload(); }
+}
+
+function feed(k, v) {
+    const f = document.getElementById('kill-feed');
+    f.innerHTML += `<div class="feed-msg">${k} a éliminé ${v}</div>`;
+}
+
+// --- LOOP ---
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+
+    if(gameState === 'BUS') {
+        busObj.position.x += 100 * dt;
+        camera.position.copy(busObj.position);
+        camera.position.y -= 30;
+        camera.lookAt(busObj.position.x+100, 0, 0);
+        renderer.render(scene, camera);
+        return;
+    }
+
+    if(controls.isLocked) {
+        // Physics
+        velocity.x -= velocity.x * 10 * dt;
+        velocity.z -= velocity.z * 10 * dt;
+        velocity.y -= 400 * dt;
+
+        const d = new THREE.Vector3();
+        d.z = Number(move.f)-Number(move.b);
+        d.x = Number(move.r)-Number(move.l);
+        d.normalize();
+
+        const speed = 600; // Vitesse augmentée
+        if(move.f||move.b) velocity.z -= d.z * speed * dt;
+        if(move.l||move.r) velocity.x -= d.x * speed * dt;
+
+        controls.moveRight(-velocity.x * dt);
+        controls.moveForward(-velocity.z * dt);
+        controls.getObject().position.y += velocity.y * dt;
+
+        if(camera.position.y < 10) { velocity.y=0; camera.position.y=10; canJump=true; }
+
+        // Storm logic
+        if(isHost) {
+            storm.timer += dt;
+            if(storm.timer > 60 && storm.r > 100) {
+                storm.target = 100;
+                storm.state = "SHRINK";
+            }
+            if(storm.state === "SHRINK") {
+                storm.r -= 10 * dt;
+                stormMesh.scale.set(storm.r/1000, 1, storm.r/1000);
+            }
+            // Dégats zone
+            if(Math.hypot(camera.position.x, camera.position.z) > storm.r) takeDamage(0.1);
+            
+            document.getElementById('storm-timer').innerText = storm.state==='WAIT' ? Math.floor(60-storm.timer) : "RÉTRÉCISSEMENT";
+        }
+
+        // Multi Sync
+        if(mode === 'MULTI') {
+            send({t:'POS', x:camera.position.x, y:camera.position.y, z:camera.position.z, ry:camera.rotation.y, skin:GameData.skin});
+        }
+        
+        // Bots Logic
+        if(mode === 'SOLO') {
+            entities.forEach(b => {
+                if(Math.random()<0.01) b.target = new THREE.Vector3((Math.random()-.5)*500, 5, (Math.random()-.5)*500);
+                if(b.target) {
+                    b.mesh.lookAt(b.target);
+                    b.mesh.translateZ(10 * dt);
+                }
+            });
+        }
+        
+        // Minimap
+        const ctx = document.getElementById('minimap').getContext('2d');
+        ctx.fillStyle='#4CAF50'; ctx.fillRect(0,0,150,150);
+        const s = 150/2000; const cx=75, cy=75;
+        
+        // Storm Map
+        ctx.strokeStyle='#8e44ad'; ctx.beginPath(); ctx.arc(cx, cy, storm.r*s, 0, Math.PI*2); ctx.stroke();
+        
+        // Player
+        ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(cx+camera.position.x*s, cy+camera.position.z*s, 3, 0, Math.PI*2); ctx.fill();
+        
+        // Enemies
+        ctx.fillStyle='red';
+        entities.forEach(e => {
+            ctx.beginPath(); ctx.arc(cx+e.mesh.position.x*s, cy+e.mesh.position.z*s, 2, 0, Math.PI*2); ctx.fill();
+        });
+    }
+
+    // Bullets
+    bullets.forEach((b,i) => {
+        b.position.add(b.userData.vel.clone().multiplyScalar(dt*10));
+        if(b.position.distanceTo(camera.position) > 1000) { scene.remove(b); bullets.splice(i,1); }
+    });
+
+    renderer.render(scene, camera);
+}
+
+loadSave();
+</script>
+</body>
+</html>
